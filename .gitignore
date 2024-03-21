@@ -1,0 +1,9 @@
+dist/
+icons/
+pixmaps/
+
+pngConvert
+pngConvert.exe
+png-convert
+
+*.out

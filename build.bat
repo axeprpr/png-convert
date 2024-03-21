@@ -1,8 +1,24 @@
+@echo off
+setlocal
+
+if not exist dist mkdir dist
+
+if "%1"=="" (
+  set VERSION=pngConvert
+) else (
+  set VERSION=%1
+)
+
 set GOOS=darwin
-go build -o png-convert.MacOS
+set GOARCH=amd64
+go build -o dist\%VERSION%-darwin-amd64 .
 
 set GOOS=windows
-go build -o png-convert.exe
+set GOARCH=amd64
+go build -o dist\%VERSION%-windows-amd64.exe .
 
 set GOOS=linux
-go build -o png-convert.Linux
+set GOARCH=amd64
+go build -o dist\%VERSION%-linux-amd64 .
+
+endlocal
