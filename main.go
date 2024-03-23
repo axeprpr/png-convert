@@ -18,6 +18,8 @@ import (
 	"github.com/jackmordaunt/icns/v3"
 )
 
+var version = "dev"
+
 type Options struct {
 	InputPath  string
 	OutputName string
@@ -60,10 +62,15 @@ func newIcondirentry() icondirentry {
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
 	opts, err := parseFlags()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid arguments: %v\n", err)
 		os.Exit(2)
+	}
+	if *showVersion {
+		fmt.Println(version)
+		return
 	}
 
 	if err := Convert(opts); err != nil {

@@ -32,6 +32,7 @@ go run . \
 - `-d`: base output directory
 - `-clean`: remove generated `icons/hicolor` and `pixmaps` inside the output directory before writing
 - `-sizes`: comma-separated icon sizes, default `16,24,32,48,64,96,128,256,512`
+- `-version`: print build version and exit
 
 ## Development
 
