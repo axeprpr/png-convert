@@ -17,22 +17,22 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            asset_name: pngConvert-linux-amd64
+            asset_name: png-convert-linux-amd64
           - goos: linux
             goarch: arm64
-            asset_name: pngConvert-linux-arm64
+            asset_name: png-convert-linux-arm64
           - goos: windows
             goarch: amd64
-            asset_name: pngConvert-windows-amd64.exe
+            asset_name: png-convert-windows-amd64.exe
           - goos: windows
             goarch: arm64
-            asset_name: pngConvert-windows-arm64.exe
+            asset_name: png-convert-windows-arm64.exe
           - goos: darwin
             goarch: amd64
-            asset_name: pngConvert-darwin-amd64
+            asset_name: png-convert-darwin-amd64
           - goos: darwin
             goarch: arm64
-            asset_name: pngConvert-darwin-arm64
+            asset_name: png-convert-darwin-arm64
 
     steps:
       - name: Checkout

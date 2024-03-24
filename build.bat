@@ -4,7 +4,7 @@ setlocal
 if not exist dist mkdir dist
 
 if "%1"=="" (
-  set VERSION=pngConvert
+  set VERSION=png-convert
 ) else (
   set VERSION=%1
 )

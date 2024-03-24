@@ -1,6 +1,6 @@
-# pngConvert
+# png-convert
 
-`pngConvert` converts one source PNG into:
+`png-convert` converts one source PNG into:
 
 - Linux hicolor icons under `icons/hicolor/<size>x<size>/apps/`
 - a `pixmaps/<name>.png` file at 128x128
