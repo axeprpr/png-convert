@@ -46,7 +46,10 @@ go build ./...
 Push a tag like `v1.0.0` to trigger the GitHub Actions release workflow. It builds:
 
 - Linux `amd64`
+- Linux `arm64`
 - Windows `amd64`
+- Windows `arm64`
 - macOS `amd64`
+- macOS `arm64`
 
-and uploads the binaries as GitHub release assets.
+and uploads the binaries plus `SHA256SUMS.txt` as GitHub release assets. You can also run the workflow manually with `workflow_dispatch`.
