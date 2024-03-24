@@ -7,6 +7,13 @@
 - a Windows `.ico`
 - a macOS `.icns`
 
+## Repository
+
+```bash
+git clone https://github.com/axeprpr/png-convert.git
+cd png-convert
+```
+
 ## Requirements
 
 - Go 1.21+
