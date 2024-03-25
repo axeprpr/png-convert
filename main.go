@@ -146,11 +146,20 @@ func validateOptions(opts Options) error {
 	if opts.OutputName == "" || filepath.Ext(opts.OutputName) != ".png" {
 		return errors.New("output PNG name must end with .png")
 	}
+	if filepath.Base(opts.OutputName) != opts.OutputName {
+		return errors.New("output PNG name must not contain path separators")
+	}
 	if opts.ICOName == "" || filepath.Ext(opts.ICOName) != ".ico" {
 		return errors.New("ICO output name must end with .ico")
 	}
+	if filepath.Base(opts.ICOName) != opts.ICOName {
+		return errors.New("ICO output name must not contain path separators")
+	}
 	if opts.ICNSName == "" || filepath.Ext(opts.ICNSName) != ".icns" {
 		return errors.New("ICNS output name must end with .icns")
+	}
+	if filepath.Base(opts.ICNSName) != opts.ICNSName {
+		return errors.New("ICNS output name must not contain path separators")
 	}
 	if opts.OutputDir == "" {
 		return errors.New("output directory is required")

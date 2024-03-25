@@ -88,6 +88,22 @@ func TestConvertRejectsInvalidOptions(t *testing.T) {
 	}
 }
 
+func TestConvertRejectsOutputPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	err := Convert(Options{
+		InputPath:  "input.png",
+		OutputName: "../output.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  ".",
+		Sizes:      []int{16},
+	})
+	if err == nil {
+		t.Fatal("expected validation error for output path traversal")
+	}
+}
+
 func writeSamplePNG(path string, width, height int) error {
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
