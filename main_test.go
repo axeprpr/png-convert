@@ -29,6 +29,14 @@ func TestParseSizes(t *testing.T) {
 	}
 }
 
+func TestParseSizesRejectsInvalidTokens(t *testing.T) {
+	t.Parallel()
+
+	if _, err := parseSizes("16x,32"); err == nil {
+		t.Fatal("expected parseSizes to reject invalid size token")
+	}
+}
+
 func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 	t.Parallel()
 

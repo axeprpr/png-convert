@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/disintegration/imaging"
@@ -114,8 +115,8 @@ func parseSizes(raw string) ([]int, error) {
 			continue
 		}
 
-		var size int
-		if _, err := fmt.Sscanf(part, "%d", &size); err != nil {
+		size, err := strconv.Atoi(part)
+		if err != nil {
 			return nil, fmt.Errorf("parse size %q: %w", part, err)
 		}
 		if size <= 0 || size > 512 {
