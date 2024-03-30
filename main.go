@@ -210,13 +210,12 @@ func Convert(opts Options) error {
 		if err := imaging.Save(resizedImage, outputPath); err != nil {
 			return fmt.Errorf("save resized image %s: %w", outputPath, err)
 		}
+	}
 
-		if size == 128 {
-			pixmapPath := filepath.Join(pixmapsRoot, opts.OutputName)
-			if err := imaging.Save(resizedImage, pixmapPath); err != nil {
-				return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
-			}
-		}
+	pixmapPath := filepath.Join(pixmapsRoot, opts.OutputName)
+	pixmapImage := imaging.Resize(srcImage, 128, 128, imaging.Lanczos)
+	if err := imaging.Save(pixmapImage, pixmapPath); err != nil {
+		return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
 	}
 
 	icoPath := filepath.Join(opts.OutputDir, opts.ICOName)

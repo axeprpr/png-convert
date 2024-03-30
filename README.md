@@ -38,8 +38,10 @@ go run . \
 - `-m`: ICNS filename
 - `-d`: base output directory
 - `-clean`: remove generated `icons/hicolor` and `pixmaps` inside the output directory before writing
-- `-sizes`: comma-separated icon sizes, default `16,24,32,48,64,96,128,256,512`
+- `-sizes`: comma-separated Linux and ICO icon sizes, default `16,24,32,48,64,96,128,256,512`
 - `-version`: print build version and exit
+
+`pixmaps/<name>.png` is always generated at `128x128`, even if `128` is not included in `-sizes`.
 
 ## Development
 

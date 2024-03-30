@@ -80,6 +80,35 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 	}
 }
 
+func TestConvertAlwaysGeneratesPixmap(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	inputPath := filepath.Join(tempDir, "input.png")
+	if err := writeSamplePNG(inputPath, 512, 512); err != nil {
+		t.Fatalf("writeSamplePNG: %v", err)
+	}
+
+	opts := Options{
+		InputPath:  inputPath,
+		OutputName: "app.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  tempDir,
+		Clean:      true,
+		Sizes:      []int{16, 32, 64, 256},
+	}
+
+	if err := Convert(opts); err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	pixmapPath := filepath.Join(tempDir, "pixmaps", "app.png")
+	if _, err := os.Stat(pixmapPath); err != nil {
+		t.Fatalf("expected pixmap artifact missing: %v", err)
+	}
+}
+
 func TestConvertRejectsInvalidOptions(t *testing.T) {
 	t.Parallel()
 
