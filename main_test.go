@@ -54,6 +54,12 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 		OutputDir:  tempDir,
 		Clean:      true,
 		Sizes:      []int{16, 32, 128, 256, 512},
+		Only: map[string]bool{
+			"linux":  true,
+			"pixmap": true,
+			"ico":    true,
+			"icns":   true,
+		},
 	}
 
 	if err := Convert(opts); err != nil {
@@ -97,6 +103,12 @@ func TestConvertAlwaysGeneratesPixmap(t *testing.T) {
 		OutputDir:  tempDir,
 		Clean:      true,
 		Sizes:      []int{16, 32, 64, 256},
+		Only: map[string]bool{
+			"linux":  true,
+			"pixmap": true,
+			"ico":    true,
+			"icns":   true,
+		},
 	}
 
 	if err := Convert(opts); err != nil {
@@ -119,6 +131,9 @@ func TestConvertRejectsInvalidOptions(t *testing.T) {
 		ICNSName:   "AppIcon.icns",
 		OutputDir:  ".",
 		Sizes:      []int{16},
+		Only: map[string]bool{
+			"linux": true,
+		},
 	})
 	if err == nil {
 		t.Fatal("expected validation error for non-PNG input")
@@ -135,9 +150,49 @@ func TestConvertRejectsOutputPathTraversal(t *testing.T) {
 		ICNSName:   "AppIcon.icns",
 		OutputDir:  ".",
 		Sizes:      []int{16},
+		Only: map[string]bool{
+			"linux": true,
+		},
 	})
 	if err == nil {
 		t.Fatal("expected validation error for output path traversal")
+	}
+}
+
+func TestConvertCanGenerateOnlyICNS(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	inputPath := filepath.Join(tempDir, "input.png")
+	if err := writeSamplePNG(inputPath, 512, 512); err != nil {
+		t.Fatalf("writeSamplePNG: %v", err)
+	}
+
+	opts := Options{
+		InputPath:  inputPath,
+		OutputName: "app.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  tempDir,
+		Clean:      true,
+		Sizes:      []int{16, 32, 128, 256},
+		Only: map[string]bool{
+			"icns": true,
+		},
+	}
+
+	if err := Convert(opts); err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tempDir, "AppIcon.icns")); err != nil {
+		t.Fatalf("expected icns artifact missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "app.ico")); !os.IsNotExist(err) {
+		t.Fatalf("expected ico artifact to be omitted, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "icons")); !os.IsNotExist(err) {
+		t.Fatalf("expected linux icons to be omitted, got err=%v", err)
 	}
 }
 

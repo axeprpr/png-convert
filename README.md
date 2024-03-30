@@ -39,6 +39,7 @@ go run . \
 - `-d`: base output directory
 - `-clean`: remove generated `icons/hicolor` and `pixmaps` inside the output directory before writing
 - `-sizes`: comma-separated Linux and ICO icon sizes, default `16,24,32,48,64,96,128,256,512`
+- `-only`: comma-separated outputs to generate, choose from `linux,pixmap,ico,icns`
 - `-version`: print build version and exit
 
 `pixmaps/<name>.png` is always generated at `128x128`, even if `128` is not included in `-sizes`.

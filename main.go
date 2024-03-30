@@ -29,6 +29,7 @@ type Options struct {
 	OutputDir  string
 	Clean      bool
 	Sizes      []int
+	Only       map[string]bool
 }
 
 type icondir struct {
@@ -84,6 +85,7 @@ func main() {
 
 func parseFlags() (Options, error) {
 	var sizesArg string
+	var onlyArg string
 
 	opts := Options{}
 	flag.StringVar(&opts.InputPath, "i", "input.png", "input PNG file path")
@@ -93,6 +95,7 @@ func parseFlags() (Options, error) {
 	flag.StringVar(&opts.OutputDir, "d", ".", "base output directory")
 	flag.BoolVar(&opts.Clean, "clean", false, "remove generated output directories before regenerating")
 	flag.StringVar(&sizesArg, "sizes", "16,24,32,48,64,96,128,256,512", "comma separated icon sizes")
+	flag.StringVar(&onlyArg, "only", "linux,pixmap,ico,icns", "comma separated outputs: linux,pixmap,ico,icns")
 	flag.Parse()
 
 	sizes, err := parseSizes(sizesArg)
@@ -100,6 +103,12 @@ func parseFlags() (Options, error) {
 		return Options{}, err
 	}
 	opts.Sizes = sizes
+
+	only, err := parseOnly(onlyArg)
+	if err != nil {
+		return Options{}, err
+	}
+	opts.Only = only
 
 	return opts, validateOptions(opts)
 }
@@ -168,7 +177,46 @@ func validateOptions(opts Options) error {
 	if len(opts.Sizes) == 0 {
 		return errors.New("at least one size is required")
 	}
+	if len(opts.Only) == 0 {
+		return errors.New("at least one output target is required")
+	}
 	return nil
+}
+
+func parseOnly(raw string) (map[string]bool, error) {
+	valid := map[string]bool{
+		"linux":  true,
+		"pixmap": true,
+		"ico":    true,
+		"icns":   true,
+	}
+
+	parts := strings.Split(raw, ",")
+	selected := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(strings.ToLower(part))
+		if part == "" {
+			continue
+		}
+		if part == "all" {
+			return map[string]bool{
+				"linux":  true,
+				"pixmap": true,
+				"ico":    true,
+				"icns":   true,
+			}, nil
+		}
+		if !valid[part] {
+			return nil, fmt.Errorf("unsupported output target %q", part)
+		}
+		selected[part] = true
+	}
+
+	if len(selected) == 0 {
+		return nil, errors.New("at least one output target is required")
+	}
+
+	return selected, nil
 }
 
 func Convert(opts Options) error {
@@ -185,50 +233,79 @@ func Convert(opts Options) error {
 	pixmapsRoot := filepath.Join(opts.OutputDir, "pixmaps")
 
 	if opts.Clean {
-		for _, path := range []string{iconsRoot, pixmapsRoot} {
+		for _, path := range cleanPaths(opts, iconsRoot, pixmapsRoot) {
 			if err := os.RemoveAll(path); err != nil {
 				return fmt.Errorf("remove %s: %w", path, err)
 			}
 		}
 	}
 
-	if err := os.MkdirAll(iconsRoot, 0o755); err != nil {
-		return fmt.Errorf("create icons root: %w", err)
-	}
-	if err := os.MkdirAll(pixmapsRoot, 0o755); err != nil {
-		return fmt.Errorf("create pixmaps root: %w", err)
-	}
-
-	for _, size := range opts.Sizes {
-		sizeDir := filepath.Join(iconsRoot, fmt.Sprintf("%dx%d", size, size), "apps")
-		if err := os.MkdirAll(sizeDir, 0o755); err != nil {
-			return fmt.Errorf("create %s: %w", sizeDir, err)
+	if opts.Only["linux"] {
+		if err := os.MkdirAll(iconsRoot, 0o755); err != nil {
+			return fmt.Errorf("create icons root: %w", err)
 		}
-
-		outputPath := filepath.Join(sizeDir, opts.OutputName)
-		resizedImage := imaging.Resize(srcImage, size, size, imaging.Lanczos)
-		if err := imaging.Save(resizedImage, outputPath); err != nil {
-			return fmt.Errorf("save resized image %s: %w", outputPath, err)
+	}
+	if opts.Only["pixmap"] {
+		if err := os.MkdirAll(pixmapsRoot, 0o755); err != nil {
+			return fmt.Errorf("create pixmaps root: %w", err)
 		}
 	}
 
-	pixmapPath := filepath.Join(pixmapsRoot, opts.OutputName)
-	pixmapImage := imaging.Resize(srcImage, 128, 128, imaging.Lanczos)
-	if err := imaging.Save(pixmapImage, pixmapPath); err != nil {
-		return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
+	if opts.Only["linux"] || opts.Only["ico"] {
+		for _, size := range opts.Sizes {
+			sizeDir := filepath.Join(iconsRoot, fmt.Sprintf("%dx%d", size, size), "apps")
+			if err := os.MkdirAll(sizeDir, 0o755); err != nil {
+				return fmt.Errorf("create %s: %w", sizeDir, err)
+			}
+
+			outputPath := filepath.Join(sizeDir, opts.OutputName)
+			resizedImage := imaging.Resize(srcImage, size, size, imaging.Lanczos)
+			if err := imaging.Save(resizedImage, outputPath); err != nil {
+				return fmt.Errorf("save resized image %s: %w", outputPath, err)
+			}
+		}
 	}
 
-	icoPath := filepath.Join(opts.OutputDir, opts.ICOName)
-	if err := writeICO(icoPath, iconsRoot, opts.OutputName, filterICOSizes(opts.Sizes)); err != nil {
-		return err
+	if opts.Only["pixmap"] {
+		pixmapPath := filepath.Join(pixmapsRoot, opts.OutputName)
+		pixmapImage := imaging.Resize(srcImage, 128, 128, imaging.Lanczos)
+		if err := imaging.Save(pixmapImage, pixmapPath); err != nil {
+			return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
+		}
 	}
 
-	icnsPath := filepath.Join(opts.OutputDir, opts.ICNSName)
-	if err := writeICNS(icnsPath, srcImage); err != nil {
-		return err
+	if opts.Only["ico"] {
+		icoPath := filepath.Join(opts.OutputDir, opts.ICOName)
+		if err := writeICO(icoPath, iconsRoot, opts.OutputName, filterICOSizes(opts.Sizes)); err != nil {
+			return err
+		}
+	}
+
+	if opts.Only["icns"] {
+		icnsPath := filepath.Join(opts.OutputDir, opts.ICNSName)
+		if err := writeICNS(icnsPath, srcImage); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func cleanPaths(opts Options, iconsRoot, pixmapsRoot string) []string {
+	paths := make([]string, 0, 4)
+	if opts.Only["linux"] || opts.Only["ico"] {
+		paths = append(paths, iconsRoot)
+	}
+	if opts.Only["pixmap"] {
+		paths = append(paths, pixmapsRoot)
+	}
+	if opts.Only["ico"] {
+		paths = append(paths, filepath.Join(opts.OutputDir, opts.ICOName))
+	}
+	if opts.Only["icns"] {
+		paths = append(paths, filepath.Join(opts.OutputDir, opts.ICNSName))
+	}
+	return paths
 }
 
 func filterICOSizes(sizes []int) []int {
