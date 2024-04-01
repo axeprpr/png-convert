@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -30,6 +31,7 @@ type Options struct {
 	Clean      bool
 	Sizes      []int
 	Only       map[string]bool
+	Fit        string
 }
 
 type icondir struct {
@@ -96,6 +98,7 @@ func parseFlags() (Options, error) {
 	flag.BoolVar(&opts.Clean, "clean", false, "remove generated output directories before regenerating")
 	flag.StringVar(&sizesArg, "sizes", "16,24,32,48,64,96,128,256,512", "comma separated icon sizes")
 	flag.StringVar(&onlyArg, "only", "linux,pixmap,ico,icns", "comma separated outputs: linux,pixmap,ico,icns")
+	flag.StringVar(&opts.Fit, "fit", "stretch", "resize mode: stretch or contain")
 	flag.Parse()
 
 	sizes, err := parseSizes(sizesArg)
@@ -180,6 +183,9 @@ func validateOptions(opts Options) error {
 	if len(opts.Only) == 0 {
 		return errors.New("at least one output target is required")
 	}
+	if opts.Fit != "stretch" && opts.Fit != "contain" {
+		return fmt.Errorf("unsupported fit mode %q", opts.Fit)
+	}
 	return nil
 }
 
@@ -259,7 +265,7 @@ func Convert(opts Options) error {
 			}
 
 			outputPath := filepath.Join(sizeDir, opts.OutputName)
-			resizedImage := imaging.Resize(srcImage, size, size, imaging.Lanczos)
+			resizedImage := resizeSquare(srcImage, size, opts.Fit)
 			if err := imaging.Save(resizedImage, outputPath); err != nil {
 				return fmt.Errorf("save resized image %s: %w", outputPath, err)
 			}
@@ -268,7 +274,7 @@ func Convert(opts Options) error {
 
 	if opts.Only["pixmap"] {
 		pixmapPath := filepath.Join(pixmapsRoot, opts.OutputName)
-		pixmapImage := imaging.Resize(srcImage, 128, 128, imaging.Lanczos)
+		pixmapImage := resizeSquare(srcImage, 128, opts.Fit)
 		if err := imaging.Save(pixmapImage, pixmapPath); err != nil {
 			return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
 		}
@@ -306,6 +312,15 @@ func cleanPaths(opts Options, iconsRoot, pixmapsRoot string) []string {
 		paths = append(paths, filepath.Join(opts.OutputDir, opts.ICNSName))
 	}
 	return paths
+}
+
+func resizeSquare(src image.Image, size int, fit string) image.Image {
+	if fit == "contain" {
+		fitted := imaging.Fit(src, size, size, imaging.Lanczos)
+		canvas := imaging.New(size, size, color.NRGBA{0, 0, 0, 0})
+		return imaging.PasteCenter(canvas, fitted)
+	}
+	return imaging.Resize(src, size, size, imaging.Lanczos)
 }
 
 func filterICOSizes(sizes []int) []int {

@@ -60,6 +60,7 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 			"ico":    true,
 			"icns":   true,
 		},
+		Fit: "stretch",
 	}
 
 	if err := Convert(opts); err != nil {
@@ -109,6 +110,7 @@ func TestConvertAlwaysGeneratesPixmap(t *testing.T) {
 			"ico":    true,
 			"icns":   true,
 		},
+		Fit: "stretch",
 	}
 
 	if err := Convert(opts); err != nil {
@@ -134,6 +136,7 @@ func TestConvertRejectsInvalidOptions(t *testing.T) {
 		Only: map[string]bool{
 			"linux": true,
 		},
+		Fit: "stretch",
 	})
 	if err == nil {
 		t.Fatal("expected validation error for non-PNG input")
@@ -153,6 +156,7 @@ func TestConvertRejectsOutputPathTraversal(t *testing.T) {
 		Only: map[string]bool{
 			"linux": true,
 		},
+		Fit: "stretch",
 	})
 	if err == nil {
 		t.Fatal("expected validation error for output path traversal")
@@ -179,6 +183,7 @@ func TestConvertCanGenerateOnlyICNS(t *testing.T) {
 		Only: map[string]bool{
 			"icns": true,
 		},
+		Fit: "stretch",
 	}
 
 	if err := Convert(opts); err != nil {
@@ -193,6 +198,55 @@ func TestConvertCanGenerateOnlyICNS(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "icons")); !os.IsNotExist(err) {
 		t.Fatalf("expected linux icons to be omitted, got err=%v", err)
+	}
+}
+
+func TestConvertContainFitPreservesAspectRatio(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	inputPath := filepath.Join(tempDir, "input.png")
+	if err := writeSamplePNG(inputPath, 300, 100); err != nil {
+		t.Fatalf("writeSamplePNG: %v", err)
+	}
+
+	opts := Options{
+		InputPath:  inputPath,
+		OutputName: "app.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  tempDir,
+		Clean:      true,
+		Sizes:      []int{128},
+		Only: map[string]bool{
+			"linux": true,
+		},
+		Fit: "contain",
+	}
+
+	if err := Convert(opts); err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	outputPath := filepath.Join(tempDir, "icons", "hicolor", "128x128", "apps", "app.png")
+	file, err := os.Open(outputPath)
+	if err != nil {
+		t.Fatalf("open output png: %v", err)
+	}
+	defer file.Close()
+
+	img, err := png.Decode(file)
+	if err != nil {
+		t.Fatalf("decode output png: %v", err)
+	}
+
+	topLeft := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA)
+	center := color.NRGBAModel.Convert(img.At(64, 64)).(color.NRGBA)
+	if topLeft.A != 0 {
+		t.Fatalf("expected transparent padding in contain mode, got alpha=%d", topLeft.A)
+	}
+	if center.A == 0 {
+		t.Fatal("expected image content in center of contain mode output")
 	}
 }
 
