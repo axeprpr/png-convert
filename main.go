@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,6 +33,13 @@ type Options struct {
 	Sizes      []int
 	Only       map[string]bool
 	Fit        string
+	Manifest   string
+}
+
+type Manifest struct {
+	InputPath string              `json:"input_path"`
+	OutputDir string              `json:"output_dir"`
+	Outputs   map[string][]string `json:"outputs"`
 }
 
 type icondir struct {
@@ -99,6 +107,7 @@ func parseFlags() (Options, error) {
 	flag.StringVar(&sizesArg, "sizes", "16,24,32,48,64,96,128,256,512", "comma separated icon sizes")
 	flag.StringVar(&onlyArg, "only", "linux,pixmap,ico,icns", "comma separated outputs: linux,pixmap,ico,icns")
 	flag.StringVar(&opts.Fit, "fit", "stretch", "resize mode: stretch or contain")
+	flag.StringVar(&opts.Manifest, "manifest", "", "optional JSON manifest filename to write under output directory")
 	flag.Parse()
 
 	sizes, err := parseSizes(sizesArg)
@@ -186,6 +195,14 @@ func validateOptions(opts Options) error {
 	if opts.Fit != "stretch" && opts.Fit != "contain" {
 		return fmt.Errorf("unsupported fit mode %q", opts.Fit)
 	}
+	if opts.Manifest != "" {
+		if filepath.Base(opts.Manifest) != opts.Manifest {
+			return errors.New("manifest filename must not contain path separators")
+		}
+		if filepath.Ext(opts.Manifest) != ".json" {
+			return errors.New("manifest filename must end with .json")
+		}
+	}
 	return nil
 }
 
@@ -257,6 +274,12 @@ func Convert(opts Options) error {
 		}
 	}
 
+	manifest := Manifest{
+		InputPath: opts.InputPath,
+		OutputDir: opts.OutputDir,
+		Outputs:   map[string][]string{},
+	}
+
 	if opts.Only["linux"] || opts.Only["ico"] {
 		for _, size := range opts.Sizes {
 			sizeDir := filepath.Join(iconsRoot, fmt.Sprintf("%dx%d", size, size), "apps")
@@ -269,6 +292,9 @@ func Convert(opts Options) error {
 			if err := imaging.Save(resizedImage, outputPath); err != nil {
 				return fmt.Errorf("save resized image %s: %w", outputPath, err)
 			}
+			if opts.Only["linux"] {
+				manifest.Outputs["linux"] = append(manifest.Outputs["linux"], outputPath)
+			}
 		}
 	}
 
@@ -278,6 +304,7 @@ func Convert(opts Options) error {
 		if err := imaging.Save(pixmapImage, pixmapPath); err != nil {
 			return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
 		}
+		manifest.Outputs["pixmap"] = append(manifest.Outputs["pixmap"], pixmapPath)
 	}
 
 	if opts.Only["ico"] {
@@ -285,11 +312,19 @@ func Convert(opts Options) error {
 		if err := writeICO(icoPath, iconsRoot, opts.OutputName, filterICOSizes(opts.Sizes)); err != nil {
 			return err
 		}
+		manifest.Outputs["ico"] = append(manifest.Outputs["ico"], icoPath)
 	}
 
 	if opts.Only["icns"] {
 		icnsPath := filepath.Join(opts.OutputDir, opts.ICNSName)
 		if err := writeICNS(icnsPath, srcImage); err != nil {
+			return err
+		}
+		manifest.Outputs["icns"] = append(manifest.Outputs["icns"], icnsPath)
+	}
+
+	if opts.Manifest != "" {
+		if err := writeManifest(filepath.Join(opts.OutputDir, opts.Manifest), manifest); err != nil {
 			return err
 		}
 	}
@@ -321,6 +356,18 @@ func resizeSquare(src image.Image, size int, fit string) image.Image {
 		return imaging.PasteCenter(canvas, fitted)
 	}
 	return imaging.Resize(src, size, size, imaging.Lanczos)
+}
+
+func writeManifest(path string, manifest Manifest) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write manifest %s: %w", path, err)
+	}
+	return nil
 }
 
 func filterICOSizes(sizes []int) []int {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/png"
@@ -60,7 +61,8 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 			"ico":    true,
 			"icns":   true,
 		},
-		Fit: "stretch",
+		Fit:      "stretch",
+		Manifest: "manifest.json",
 	}
 
 	if err := Convert(opts); err != nil {
@@ -84,6 +86,18 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 		if info.Size() == 0 {
 			t.Fatalf("artifact is empty: %s", path)
 		}
+	}
+
+	manifestData, err := os.ReadFile(filepath.Join(tempDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("expected manifest missing: %v", err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("unmarshal manifest: %v", err)
+	}
+	if len(manifest.Outputs["ico"]) != 1 {
+		t.Fatalf("unexpected ico manifest entries: %v", manifest.Outputs["ico"])
 	}
 }
 

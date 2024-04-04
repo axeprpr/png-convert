@@ -41,6 +41,7 @@ go run . \
 - `-sizes`: comma-separated Linux and ICO icon sizes, default `16,24,32,48,64,96,128,256,512`
 - `-only`: comma-separated outputs to generate, choose from `linux,pixmap,ico,icns`
 - `-fit`: `stretch` to force square resize, `contain` to preserve aspect ratio with transparent padding
+- `-manifest`: optional JSON filename for recording generated artifacts
 - `-version`: print build version and exit
 
 `pixmaps/<name>.png` is always generated at `128x128`, even if `128` is not included in `-sizes`.
