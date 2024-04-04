@@ -34,6 +34,7 @@ type Options struct {
 	Only       map[string]bool
 	Fit        string
 	Manifest   string
+	Background color.NRGBA
 }
 
 type Manifest struct {
@@ -106,8 +107,9 @@ func parseFlags() (Options, error) {
 	flag.BoolVar(&opts.Clean, "clean", false, "remove generated output directories before regenerating")
 	flag.StringVar(&sizesArg, "sizes", "16,24,32,48,64,96,128,256,512", "comma separated icon sizes")
 	flag.StringVar(&onlyArg, "only", "linux,pixmap,ico,icns", "comma separated outputs: linux,pixmap,ico,icns")
-	flag.StringVar(&opts.Fit, "fit", "stretch", "resize mode: stretch or contain")
+	flag.StringVar(&opts.Fit, "fit", "stretch", "resize mode: stretch, contain, or cover")
 	flag.StringVar(&opts.Manifest, "manifest", "", "optional JSON manifest filename to write under output directory")
+	backgroundArg := flag.String("background", "transparent", "background color for contain mode, use transparent or #RRGGBB[AA]")
 	flag.Parse()
 
 	sizes, err := parseSizes(sizesArg)
@@ -121,6 +123,12 @@ func parseFlags() (Options, error) {
 		return Options{}, err
 	}
 	opts.Only = only
+
+	background, err := parseBackground(*backgroundArg)
+	if err != nil {
+		return Options{}, err
+	}
+	opts.Background = background
 
 	return opts, validateOptions(opts)
 }
@@ -192,7 +200,7 @@ func validateOptions(opts Options) error {
 	if len(opts.Only) == 0 {
 		return errors.New("at least one output target is required")
 	}
-	if opts.Fit != "stretch" && opts.Fit != "contain" {
+	if opts.Fit != "stretch" && opts.Fit != "contain" && opts.Fit != "cover" {
 		return fmt.Errorf("unsupported fit mode %q", opts.Fit)
 	}
 	if opts.Manifest != "" {
@@ -242,6 +250,43 @@ func parseOnly(raw string) (map[string]bool, error) {
 	return selected, nil
 }
 
+func parseBackground(raw string) (color.NRGBA, error) {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" || raw == "transparent" {
+		return color.NRGBA{0, 0, 0, 0}, nil
+	}
+	if !strings.HasPrefix(raw, "#") {
+		return color.NRGBA{}, fmt.Errorf("background %q must be transparent or start with #", raw)
+	}
+	hex := strings.TrimPrefix(raw, "#")
+	switch len(hex) {
+	case 6:
+		var rgb uint32
+		if _, err := fmt.Sscanf(hex, "%06x", &rgb); err != nil {
+			return color.NRGBA{}, fmt.Errorf("parse background %q: %w", raw, err)
+		}
+		return color.NRGBA{
+			R: uint8(rgb >> 16),
+			G: uint8(rgb >> 8),
+			B: uint8(rgb),
+			A: 255,
+		}, nil
+	case 8:
+		var rgba uint32
+		if _, err := fmt.Sscanf(hex, "%08x", &rgba); err != nil {
+			return color.NRGBA{}, fmt.Errorf("parse background %q: %w", raw, err)
+		}
+		return color.NRGBA{
+			R: uint8(rgba >> 24),
+			G: uint8(rgba >> 16),
+			B: uint8(rgba >> 8),
+			A: uint8(rgba),
+		}, nil
+	default:
+		return color.NRGBA{}, fmt.Errorf("background %q must use #RRGGBB or #RRGGBBAA", raw)
+	}
+}
+
 func Convert(opts Options) error {
 	if err := validateOptions(opts); err != nil {
 		return err
@@ -288,7 +333,7 @@ func Convert(opts Options) error {
 			}
 
 			outputPath := filepath.Join(sizeDir, opts.OutputName)
-			resizedImage := resizeSquare(srcImage, size, opts.Fit)
+			resizedImage := resizeSquare(srcImage, size, opts.Fit, opts.Background)
 			if err := imaging.Save(resizedImage, outputPath); err != nil {
 				return fmt.Errorf("save resized image %s: %w", outputPath, err)
 			}
@@ -300,7 +345,7 @@ func Convert(opts Options) error {
 
 	if opts.Only["pixmap"] {
 		pixmapPath := filepath.Join(pixmapsRoot, opts.OutputName)
-		pixmapImage := resizeSquare(srcImage, 128, opts.Fit)
+		pixmapImage := resizeSquare(srcImage, 128, opts.Fit, opts.Background)
 		if err := imaging.Save(pixmapImage, pixmapPath); err != nil {
 			return fmt.Errorf("save pixmap %s: %w", pixmapPath, err)
 		}
@@ -349,11 +394,14 @@ func cleanPaths(opts Options, iconsRoot, pixmapsRoot string) []string {
 	return paths
 }
 
-func resizeSquare(src image.Image, size int, fit string) image.Image {
+func resizeSquare(src image.Image, size int, fit string, background color.NRGBA) image.Image {
 	if fit == "contain" {
 		fitted := imaging.Fit(src, size, size, imaging.Lanczos)
-		canvas := imaging.New(size, size, color.NRGBA{0, 0, 0, 0})
+		canvas := imaging.New(size, size, background)
 		return imaging.PasteCenter(canvas, fitted)
+	}
+	if fit == "cover" {
+		return imaging.Fill(src, size, size, imaging.Center, imaging.Lanczos)
 	}
 	return imaging.Resize(src, size, size, imaging.Lanczos)
 }

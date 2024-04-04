@@ -235,7 +235,8 @@ func TestConvertContainFitPreservesAspectRatio(t *testing.T) {
 		Only: map[string]bool{
 			"linux": true,
 		},
-		Fit: "contain",
+		Fit:        "contain",
+		Background: color.NRGBA{0, 0, 0, 0},
 	}
 
 	if err := Convert(opts); err != nil {
@@ -261,6 +262,98 @@ func TestConvertContainFitPreservesAspectRatio(t *testing.T) {
 	}
 	if center.A == 0 {
 		t.Fatal("expected image content in center of contain mode output")
+	}
+}
+
+func TestConvertContainFitCanUseSolidBackground(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	inputPath := filepath.Join(tempDir, "input.png")
+	if err := writeSamplePNG(inputPath, 300, 100); err != nil {
+		t.Fatalf("writeSamplePNG: %v", err)
+	}
+
+	opts := Options{
+		InputPath:  inputPath,
+		OutputName: "app.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  tempDir,
+		Clean:      true,
+		Sizes:      []int{128},
+		Only: map[string]bool{
+			"linux": true,
+		},
+		Fit:        "contain",
+		Background: color.NRGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff},
+	}
+
+	if err := Convert(opts); err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	outputPath := filepath.Join(tempDir, "icons", "hicolor", "128x128", "apps", "app.png")
+	file, err := os.Open(outputPath)
+	if err != nil {
+		t.Fatalf("open output png: %v", err)
+	}
+	defer file.Close()
+
+	img, err := png.Decode(file)
+	if err != nil {
+		t.Fatalf("decode output png: %v", err)
+	}
+
+	topLeft := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA)
+	if topLeft != (color.NRGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff}) {
+		t.Fatalf("unexpected contain background color: %#v", topLeft)
+	}
+}
+
+func TestConvertCoverFitFillsCorners(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	inputPath := filepath.Join(tempDir, "input.png")
+	if err := writeSamplePNG(inputPath, 300, 100); err != nil {
+		t.Fatalf("writeSamplePNG: %v", err)
+	}
+
+	opts := Options{
+		InputPath:  inputPath,
+		OutputName: "app.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  tempDir,
+		Clean:      true,
+		Sizes:      []int{128},
+		Only: map[string]bool{
+			"linux": true,
+		},
+		Fit:        "cover",
+		Background: color.NRGBA{0, 0, 0, 0},
+	}
+
+	if err := Convert(opts); err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	outputPath := filepath.Join(tempDir, "icons", "hicolor", "128x128", "apps", "app.png")
+	file, err := os.Open(outputPath)
+	if err != nil {
+		t.Fatalf("open output png: %v", err)
+	}
+	defer file.Close()
+
+	img, err := png.Decode(file)
+	if err != nil {
+		t.Fatalf("decode output png: %v", err)
+	}
+
+	topLeft := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA)
+	if topLeft.A == 0 {
+		t.Fatal("expected cover mode to fill output corners with image content")
 	}
 }
 
