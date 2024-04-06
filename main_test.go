@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -63,6 +64,7 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 		},
 		Fit:      "stretch",
 		Manifest: "manifest.json",
+		Archive:  "artifacts.zip",
 	}
 
 	if err := Convert(opts); err != nil {
@@ -98,6 +100,26 @@ func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 	}
 	if len(manifest.Outputs["ico"]) != 1 {
 		t.Fatalf("unexpected ico manifest entries: %v", manifest.Outputs["ico"])
+	}
+
+	archiveReader, err := zip.OpenReader(filepath.Join(tempDir, "artifacts.zip"))
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	defer archiveReader.Close()
+
+	foundManifest := false
+	foundICO := false
+	for _, file := range archiveReader.File {
+		if file.Name == "manifest.json" {
+			foundManifest = true
+		}
+		if file.Name == "app.ico" {
+			foundICO = true
+		}
+	}
+	if !foundManifest || !foundICO {
+		t.Fatalf("archive missing expected files: manifest=%v ico=%v", foundManifest, foundICO)
 	}
 }
 

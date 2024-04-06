@@ -43,6 +43,7 @@ go run . \
 - `-fit`: `stretch` to force square resize, `contain` to preserve aspect ratio with padding, `cover` to preserve aspect ratio and crop
 - `-background`: background color for `contain`, use `transparent` or hex like `#112233` / `#112233ff`
 - `-manifest`: optional JSON filename for recording generated artifacts
+- `-archive`: optional `.zip` filename for packaging generated artifacts
 - `-version`: print build version and exit
 
 `pixmaps/<name>.png` is always generated at `128x128`, even if `128` is not included in `-sizes`.

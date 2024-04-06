@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"encoding/binary"
@@ -11,6 +12,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,6 +36,7 @@ type Options struct {
 	Only       map[string]bool
 	Fit        string
 	Manifest   string
+	Archive    string
 	Background color.NRGBA
 }
 
@@ -109,6 +112,7 @@ func parseFlags() (Options, error) {
 	flag.StringVar(&onlyArg, "only", "linux,pixmap,ico,icns", "comma separated outputs: linux,pixmap,ico,icns")
 	flag.StringVar(&opts.Fit, "fit", "stretch", "resize mode: stretch, contain, or cover")
 	flag.StringVar(&opts.Manifest, "manifest", "", "optional JSON manifest filename to write under output directory")
+	flag.StringVar(&opts.Archive, "archive", "", "optional ZIP filename to package generated artifacts under output directory")
 	backgroundArg := flag.String("background", "transparent", "background color for contain mode, use transparent or #RRGGBB[AA]")
 	flag.Parse()
 
@@ -209,6 +213,14 @@ func validateOptions(opts Options) error {
 		}
 		if filepath.Ext(opts.Manifest) != ".json" {
 			return errors.New("manifest filename must end with .json")
+		}
+	}
+	if opts.Archive != "" {
+		if filepath.Base(opts.Archive) != opts.Archive {
+			return errors.New("archive filename must not contain path separators")
+		}
+		if filepath.Ext(opts.Archive) != ".zip" {
+			return errors.New("archive filename must end with .zip")
 		}
 	}
 	return nil
@@ -369,7 +381,16 @@ func Convert(opts Options) error {
 	}
 
 	if opts.Manifest != "" {
-		if err := writeManifest(filepath.Join(opts.OutputDir, opts.Manifest), manifest); err != nil {
+		manifestPath := filepath.Join(opts.OutputDir, opts.Manifest)
+		if err := writeManifest(manifestPath, manifest); err != nil {
+			return err
+		}
+		manifest.Outputs["manifest"] = append(manifest.Outputs["manifest"], manifestPath)
+	}
+
+	if opts.Archive != "" {
+		archivePath := filepath.Join(opts.OutputDir, opts.Archive)
+		if err := writeArchive(archivePath, opts.OutputDir, manifest.Outputs); err != nil {
 			return err
 		}
 	}
@@ -415,6 +436,73 @@ func writeManifest(path string, manifest Manifest) error {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write manifest %s: %w", path, err)
 	}
+	return nil
+}
+
+func writeArchive(path, baseDir string, outputs map[string][]string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create archive %s: %w", path, err)
+	}
+	defer file.Close()
+
+	zw := zip.NewWriter(file)
+	defer zw.Close()
+
+	seen := map[string]bool{}
+	for _, paths := range outputs {
+		for _, outputPath := range paths {
+			if seen[outputPath] {
+				continue
+			}
+			seen[outputPath] = true
+
+			relPath, err := filepath.Rel(baseDir, outputPath)
+			if err != nil {
+				return fmt.Errorf("resolve archive path for %s: %w", outputPath, err)
+			}
+
+			if err := addFileToZip(zw, outputPath, filepath.ToSlash(relPath)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("close archive %s: %w", path, err)
+	}
+
+	return nil
+}
+
+func addFileToZip(zw *zip.Writer, sourcePath, archivePath string) error {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("stat archive source %s: %w", sourcePath, err)
+	}
+
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return fmt.Errorf("build zip header for %s: %w", sourcePath, err)
+	}
+	header.Name = archivePath
+	header.Method = zip.Deflate
+
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return fmt.Errorf("create zip entry for %s: %w", sourcePath, err)
+	}
+
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open archive source %s: %w", sourcePath, err)
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(writer, file); err != nil {
+		return fmt.Errorf("copy archive source %s: %w", sourcePath, err)
+	}
+
 	return nil
 }
 
