@@ -30,6 +30,7 @@ type Options struct {
 	OutputName string
 	ICOName    string
 	ICNSName   string
+	Name       string
 	OutputDir  string
 	Clean      bool
 	Sizes      []int
@@ -103,6 +104,7 @@ func parseFlags() (Options, error) {
 
 	opts := Options{}
 	flag.StringVar(&opts.InputPath, "i", "input.png", "input PNG file path")
+	flag.StringVar(&opts.Name, "name", "", "base name used to derive PNG, ICO, and ICNS filenames")
 	flag.StringVar(&opts.OutputName, "o", "output.png", "PNG filename written into icon directories")
 	flag.StringVar(&opts.ICOName, "w", "app.ico", "ICO output filename")
 	flag.StringVar(&opts.ICNSName, "m", "AppIcon.icns", "ICNS output filename")
@@ -133,6 +135,8 @@ func parseFlags() (Options, error) {
 		return Options{}, err
 	}
 	opts.Background = background
+
+	applyDerivedNames(&opts)
 
 	return opts, validateOptions(opts)
 }
@@ -297,6 +301,15 @@ func parseBackground(raw string) (color.NRGBA, error) {
 	default:
 		return color.NRGBA{}, fmt.Errorf("background %q must use #RRGGBB or #RRGGBBAA", raw)
 	}
+}
+
+func applyDerivedNames(opts *Options) {
+	if opts.Name == "" {
+		return
+	}
+	opts.OutputName = opts.Name + ".png"
+	opts.ICOName = opts.Name + ".ico"
+	opts.ICNSName = opts.Name + ".icns"
 }
 
 func Convert(opts Options) error {

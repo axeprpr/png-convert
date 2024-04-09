@@ -33,6 +33,7 @@ go run . \
 ## Flags
 
 - `-i`: input PNG path
+- `-name`: base name for derived outputs like `my-app.png`, `my-app.ico`, `my-app.icns`
 - `-o`: generated PNG filename inside Linux icon directories
 - `-w`: ICO filename
 - `-m`: ICNS filename

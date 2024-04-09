@@ -39,6 +39,28 @@ func TestParseSizesRejectsInvalidTokens(t *testing.T) {
 	}
 }
 
+func TestApplyDerivedNames(t *testing.T) {
+	t.Parallel()
+
+	opts := Options{
+		Name:       "my-app",
+		OutputName: "output.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+	}
+	applyDerivedNames(&opts)
+
+	if opts.OutputName != "my-app.png" {
+		t.Fatalf("unexpected output png name: %s", opts.OutputName)
+	}
+	if opts.ICOName != "my-app.ico" {
+		t.Fatalf("unexpected ico name: %s", opts.ICOName)
+	}
+	if opts.ICNSName != "my-app.icns" {
+		t.Fatalf("unexpected icns name: %s", opts.ICNSName)
+	}
+}
+
 func TestConvertGeneratesExpectedArtifacts(t *testing.T) {
 	t.Parallel()
 
