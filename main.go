@@ -12,6 +12,8 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"os"
@@ -24,6 +26,9 @@ import (
 	"github.com/jackmordaunt/icns/v3"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
 var version = "dev"
@@ -106,7 +111,7 @@ func parseFlags() (Options, error) {
 	var onlyArg string
 
 	opts := Options{}
-	flag.StringVar(&opts.InputPath, "i", "input.png", "input PNG or SVG file path")
+	flag.StringVar(&opts.InputPath, "i", "input.png", "input PNG, SVG, JPG, GIF, BMP, TIFF, or WEBP file path")
 	flag.StringVar(&opts.Name, "name", "", "base name used to derive PNG, ICO, and ICNS filenames")
 	flag.StringVar(&opts.OutputName, "o", "output.png", "PNG filename written into icon directories")
 	flag.StringVar(&opts.ICOName, "w", "app.ico", "ICO output filename")
@@ -182,7 +187,7 @@ func validateOptions(opts Options) error {
 		return errors.New("input path is required")
 	}
 	if !isSupportedInputExt(opts.InputPath) {
-		return errors.New("input file must be a PNG or SVG")
+		return fmt.Errorf("input file must use one of: %s", strings.Join(supportedInputExts(), ", "))
 	}
 	if opts.OutputName == "" || filepath.Ext(opts.OutputName) != ".png" {
 		return errors.New("output PNG name must end with .png")
@@ -444,22 +449,30 @@ func resizeSquare(src image.Image, size int, fit string, background color.NRGBA)
 }
 
 func isSupportedInputExt(path string) bool {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png", ".svg":
-		return true
-	default:
-		return false
+	_, ok := supportedInputExtSet()[strings.ToLower(filepath.Ext(path))]
+	return ok
+}
+
+func supportedInputExts() []string {
+	return []string{".png", ".svg", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp"}
+}
+
+func supportedInputExtSet() map[string]struct{} {
+	return map[string]struct{}{
+		".png":  {},
+		".svg":  {},
+		".jpg":  {},
+		".jpeg": {},
+		".gif":  {},
+		".bmp":  {},
+		".tiff": {},
+		".tif":  {},
+		".webp": {},
 	}
 }
 
 func loadInputImage(opts Options) (image.Image, error) {
 	switch strings.ToLower(filepath.Ext(opts.InputPath)) {
-	case ".png":
-		img, err := imaging.Open(opts.InputPath)
-		if err != nil {
-			return nil, fmt.Errorf("open input image: %w", err)
-		}
-		return img, nil
 	case ".svg":
 		size := sourceRasterSize(opts)
 		img, err := rasterizeSVG(opts.InputPath, size, opts.Fit, opts.Background)
@@ -468,7 +481,15 @@ func loadInputImage(opts Options) (image.Image, error) {
 		}
 		return img, nil
 	default:
-		return nil, errors.New("input file must be a PNG or SVG")
+		if !isSupportedInputExt(opts.InputPath) {
+			return nil, fmt.Errorf("input file must use one of: %s", strings.Join(supportedInputExts(), ", "))
+		}
+
+		img, err := imaging.Open(opts.InputPath)
+		if err != nil {
+			return nil, fmt.Errorf("open input image: %w", err)
+		}
+		return img, nil
 	}
 }
 

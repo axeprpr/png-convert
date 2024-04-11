@@ -6,10 +6,15 @@ import (
 	"encoding/json"
 	"image"
 	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
 )
 
 func TestParseSizes(t *testing.T) {
@@ -37,6 +42,33 @@ func TestParseSizesRejectsInvalidTokens(t *testing.T) {
 
 	if _, err := parseSizes("16x,32"); err == nil {
 		t.Fatal("expected parseSizes to reject invalid size token")
+	}
+}
+
+func TestIsSupportedInputExt(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"icon.png",
+		"icon.svg",
+		"icon.jpg",
+		"icon.jpeg",
+		"icon.gif",
+		"icon.bmp",
+		"icon.tiff",
+		"icon.tif",
+		"icon.webp",
+		"ICON.WEBP",
+	} {
+		if !isSupportedInputExt(path) {
+			t.Fatalf("expected %s to be supported", path)
+		}
+	}
+
+	for _, path := range []string{"icon.txt", "icon.ico", "icon"} {
+		if isSupportedInputExt(path) {
+			t.Fatalf("expected %s to be rejected", path)
+		}
 	}
 }
 
@@ -199,6 +231,60 @@ func TestConvertRejectsInvalidOptions(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected validation error for unsupported input")
+	}
+}
+
+func TestConvertCanGenerateICOFromCommonRasterFormats(t *testing.T) {
+	t.Parallel()
+
+	encoders := map[string]func(string) error{
+		".jpg":  writeSampleJPEG,
+		".jpeg": writeSampleJPEG,
+		".gif":  writeSampleGIF,
+		".bmp":  writeSampleBMP,
+		".tiff": writeSampleTIFF,
+		".tif":  writeSampleTIFF,
+	}
+
+	for ext, encode := range encoders {
+		ext := ext
+		encode := encode
+		t.Run(ext, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			inputPath := filepath.Join(tempDir, "input"+ext)
+			if err := encode(inputPath); err != nil {
+				t.Fatalf("encode %s: %v", ext, err)
+			}
+
+			opts := Options{
+				InputPath:  inputPath,
+				OutputName: "app.png",
+				ICOName:    "app.ico",
+				ICNSName:   "AppIcon.icns",
+				OutputDir:  tempDir,
+				Clean:      true,
+				Sizes:      []int{16, 32, 128, 256},
+				Only: map[string]bool{
+					"ico": true,
+				},
+				Fit: "contain",
+			}
+
+			if err := Convert(opts); err != nil {
+				t.Fatalf("Convert returned error: %v", err)
+			}
+
+			icoPath := filepath.Join(tempDir, "app.ico")
+			info, err := os.Stat(icoPath)
+			if err != nil {
+				t.Fatalf("expected ico artifact missing: %v", err)
+			}
+			if info.Size() == 0 {
+				t.Fatal("generated ico is empty")
+			}
+		})
 	}
 }
 
@@ -470,4 +556,63 @@ func writeSampleSVG(path string) error {
 `))
 	data = append(data, '\n')
 	return os.WriteFile(path, data, 0o644)
+}
+
+func writeSampleJPEG(path string) error {
+	img := sampleImage(320, 180)
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return jpeg.Encode(file, img, &jpeg.Options{Quality: 90})
+}
+
+func writeSampleGIF(path string) error {
+	img := sampleImage(160, 120)
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return gif.Encode(file, img, nil)
+}
+
+func writeSampleBMP(path string) error {
+	img := sampleImage(200, 140)
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return bmp.Encode(file, img)
+}
+
+func writeSampleTIFF(path string) error {
+	img := sampleImage(240, 160)
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return tiff.Encode(file, img, nil)
+}
+
+func sampleImage(width, height int) image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.NRGBA{
+				R: uint8(x % 255),
+				G: uint8(y % 255),
+				B: uint8((x + y) % 255),
+				A: 255,
+			})
+		}
+	}
+	return img
 }
