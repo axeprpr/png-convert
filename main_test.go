@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -197,7 +198,7 @@ func TestConvertRejectsInvalidOptions(t *testing.T) {
 		Fit: "stretch",
 	})
 	if err == nil {
-		t.Fatal("expected validation error for non-PNG input")
+		t.Fatal("expected validation error for unsupported input")
 	}
 }
 
@@ -401,6 +402,43 @@ func TestConvertCoverFitFillsCorners(t *testing.T) {
 	}
 }
 
+func TestConvertCanGenerateICOFromSVG(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	inputPath := filepath.Join(tempDir, "input.svg")
+	if err := writeSampleSVG(inputPath); err != nil {
+		t.Fatalf("writeSampleSVG: %v", err)
+	}
+
+	opts := Options{
+		InputPath:  inputPath,
+		OutputName: "app.png",
+		ICOName:    "app.ico",
+		ICNSName:   "AppIcon.icns",
+		OutputDir:  tempDir,
+		Clean:      true,
+		Sizes:      []int{16, 32, 128, 256},
+		Only: map[string]bool{
+			"ico": true,
+		},
+		Fit: "contain",
+	}
+
+	if err := Convert(opts); err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	icoPath := filepath.Join(tempDir, "app.ico")
+	info, err := os.Stat(icoPath)
+	if err != nil {
+		t.Fatalf("expected ico artifact missing: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Fatal("generated ico is empty")
+	}
+}
+
 func writeSamplePNG(path string, width, height int) error {
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
@@ -421,4 +459,15 @@ func writeSamplePNG(path string, width, height int) error {
 	defer file.Close()
 
 	return png.Encode(file, img)
+}
+
+func writeSampleSVG(path string) error {
+	data := bytes.TrimSpace([]byte(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="18" fill="#0f766e"/>
+  <circle cx="50" cy="50" r="28" fill="#facc15"/>
+</svg>
+`))
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o644)
 }

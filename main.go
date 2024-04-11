@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"io"
 	"os"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/disintegration/imaging"
 	"github.com/jackmordaunt/icns/v3"
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
 )
 
 var version = "dev"
@@ -103,7 +106,7 @@ func parseFlags() (Options, error) {
 	var onlyArg string
 
 	opts := Options{}
-	flag.StringVar(&opts.InputPath, "i", "input.png", "input PNG file path")
+	flag.StringVar(&opts.InputPath, "i", "input.png", "input PNG or SVG file path")
 	flag.StringVar(&opts.Name, "name", "", "base name used to derive PNG, ICO, and ICNS filenames")
 	flag.StringVar(&opts.OutputName, "o", "output.png", "PNG filename written into icon directories")
 	flag.StringVar(&opts.ICOName, "w", "app.ico", "ICO output filename")
@@ -178,8 +181,8 @@ func validateOptions(opts Options) error {
 	if opts.InputPath == "" {
 		return errors.New("input path is required")
 	}
-	if filepath.Ext(opts.InputPath) != ".png" {
-		return errors.New("input file must be a PNG")
+	if !isSupportedInputExt(opts.InputPath) {
+		return errors.New("input file must be a PNG or SVG")
 	}
 	if opts.OutputName == "" || filepath.Ext(opts.OutputName) != ".png" {
 		return errors.New("output PNG name must end with .png")
@@ -317,9 +320,9 @@ func Convert(opts Options) error {
 		return err
 	}
 
-	srcImage, err := imaging.Open(opts.InputPath)
+	srcImage, err := loadInputImage(opts)
 	if err != nil {
-		return fmt.Errorf("open input image: %w", err)
+		return err
 	}
 
 	iconsRoot := filepath.Join(opts.OutputDir, "icons", "hicolor")
@@ -438,6 +441,109 @@ func resizeSquare(src image.Image, size int, fit string, background color.NRGBA)
 		return imaging.Fill(src, size, size, imaging.Center, imaging.Lanczos)
 	}
 	return imaging.Resize(src, size, size, imaging.Lanczos)
+}
+
+func isSupportedInputExt(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".svg":
+		return true
+	default:
+		return false
+	}
+}
+
+func loadInputImage(opts Options) (image.Image, error) {
+	switch strings.ToLower(filepath.Ext(opts.InputPath)) {
+	case ".png":
+		img, err := imaging.Open(opts.InputPath)
+		if err != nil {
+			return nil, fmt.Errorf("open input image: %w", err)
+		}
+		return img, nil
+	case ".svg":
+		size := sourceRasterSize(opts)
+		img, err := rasterizeSVG(opts.InputPath, size, opts.Fit, opts.Background)
+		if err != nil {
+			return nil, err
+		}
+		return img, nil
+	default:
+		return nil, errors.New("input file must be a PNG or SVG")
+	}
+}
+
+func sourceRasterSize(opts Options) int {
+	size := 128
+	for _, candidate := range opts.Sizes {
+		if candidate > size {
+			size = candidate
+		}
+	}
+	if opts.Only["icns"] && size < 1024 {
+		size = 1024
+	}
+	return size
+}
+
+func rasterizeSVG(path string, size int, fit string, background color.NRGBA) (image.Image, error) {
+	svgFile, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open input svg: %w", err)
+	}
+	defer svgFile.Close()
+
+	icon, err := oksvg.ReadIconStream(svgFile)
+	if err != nil {
+		return nil, fmt.Errorf("parse input svg: %w", err)
+	}
+
+	viewBox := icon.ViewBox
+	if viewBox.W <= 0 || viewBox.H <= 0 {
+		return nil, fmt.Errorf("parse input svg: missing or invalid viewBox")
+	}
+
+	canvas := image.NewNRGBA(image.Rect(0, 0, size, size))
+	draw.Draw(canvas, canvas.Bounds(), image.NewUniform(background), image.Point{}, draw.Src)
+
+	targetX, targetY, targetW, targetH := svgTargetRect(float64(size), float64(size), viewBox.W, viewBox.H, fit)
+	icon.SetTarget(targetX, targetY, targetW, targetH)
+
+	scanner := rasterx.NewScannerGV(size, size, canvas, canvas.Bounds())
+	raster := rasterx.NewDasher(size, size, scanner)
+	icon.Draw(raster, 1.0)
+
+	return canvas, nil
+}
+
+func svgTargetRect(dstW, dstH, srcW, srcH float64, fit string) (float64, float64, float64, float64) {
+	switch fit {
+	case "contain":
+		scale := minFloat(dstW/srcW, dstH/srcH)
+		targetW := srcW * scale
+		targetH := srcH * scale
+		return (dstW - targetW) / 2, (dstH - targetH) / 2, targetW, targetH
+	case "cover":
+		scale := maxFloat(dstW/srcW, dstH/srcH)
+		targetW := srcW * scale
+		targetH := srcH * scale
+		return (dstW - targetW) / 2, (dstH - targetH) / 2, targetW, targetH
+	default:
+		return 0, 0, dstW, dstH
+	}
+}
+
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func writeManifest(path string, manifest Manifest) error {
