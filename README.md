@@ -1,6 +1,6 @@
 # png-convert
 
-`png-convert` converts one source PNG into:
+`png-convert` converts one source PNG or SVG into:
 
 - Linux hicolor icons under `icons/hicolor/<size>x<size>/apps/`
 - a `pixmaps/<name>.png` file at 128x128
@@ -32,7 +32,7 @@ go run . \
 
 ## Flags
 
-- `-i`: input PNG path
+- `-i`: input PNG or SVG path
 - `-name`: base name for derived outputs like `my-app.png`, `my-app.ico`, `my-app.icns`
 - `-o`: generated PNG filename inside Linux icon directories
 - `-w`: ICO filename
