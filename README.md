@@ -30,9 +30,27 @@ go run . \
   -clean
 ```
 
+## Web UI
+
+Start the embedded local web UI:
+
+```bash
+go run . -serve
+```
+
+It listens on `127.0.0.1:3222` by default. Override it if needed:
+
+```bash
+go run . -serve -addr 127.0.0.1:8080
+```
+
+The page is embedded into the binary and does not need external HTML, CSS, or JS files. Upload one source image, choose `ico` and/or `icns`, and it downloads a `.zip` with the generated files.
+
 ## Flags
 
 - `-i`: input image path, supports `png`, `svg`, `jpg`, `jpeg`, `gif`, `bmp`, `tiff`, `tif`, `webp`
+- `-serve`: start the embedded local web UI
+- `-addr`: web UI bind address, default `127.0.0.1:3222`
 - `-name`: base name for derived outputs like `my-app.png`, `my-app.ico`, `my-app.icns`
 - `-o`: generated PNG filename inside Linux icon directories
 - `-w`: ICO filename
