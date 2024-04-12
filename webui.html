@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>png-convert</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #d8c9a7;
+      color: #1e1a15;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 32px auto;
+      padding: 24px;
+    }
+    .card {
+      background: #f3ead7;
+      border: 3px solid #3a2d1f;
+      box-shadow: 8px 8px 0 #8f7754;
+      padding: 20px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 36px;
+      line-height: 1;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    p {
+      margin: 0 0 16px;
+      line-height: 1.4;
+    }
+    form {
+      display: grid;
+      gap: 14px;
+    }
+    .row {
+      display: grid;
+      gap: 10px;
+    }
+    .two {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    label, legend {
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px 12px;
+      border: 2px solid #3a2d1f;
+      background: #fffaf0;
+      color: #1e1a15;
+      font: inherit;
+    }
+    fieldset {
+      margin: 0;
+      padding: 12px;
+      border: 2px solid #3a2d1f;
+      background: #efe2c9;
+    }
+    .checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .checks label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 400;
+    }
+    .checks input {
+      width: auto;
+      padding: 0;
+    }
+    button {
+      background: #b64d2d;
+      color: #fff7ee;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+    .status {
+      min-height: 24px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .hint {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>png-convert</h1>
+      <p>Very small local UI for turning one image into <code>.ico</code> and <code>.icns</code>. It returns a zip file.</p>
+      <form id="form">
+        <div class="row">
+          <label for="file">Source image</label>
+          <input id="file" name="file" type="file" accept=".png,.svg,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.webp" required>
+        </div>
+
+        <div class="row two">
+          <div>
+            <label for="name">Base name</label>
+            <input id="name" name="name" type="text" value="app" required>
+          </div>
+          <div>
+            <label for="fit">Fit</label>
+            <select id="fit" name="fit">
+              <option value="contain">contain</option>
+              <option value="stretch">stretch</option>
+              <option value="cover">cover</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row two">
+          <div>
+            <label for="sizes">ICO sizes</label>
+            <input id="sizes" name="sizes" type="text" value="16,24,32,48,64,96,128,256">
+          </div>
+          <div>
+            <label for="background">Background</label>
+            <input id="background" name="background" type="text" value="transparent">
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Outputs</legend>
+          <div class="checks">
+            <label><input type="checkbox" name="target" value="ico" checked> ICO</label>
+            <label><input type="checkbox" name="target" value="icns" checked> ICNS</label>
+          </div>
+        </fieldset>
+
+        <button id="submit" type="submit">Build Icons</button>
+        <div id="status" class="status"></div>
+        <div class="hint">Run locally with <code>go run . -serve</code> and open the printed address.</div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("form");
+    const statusEl = document.getElementById("status");
+    const submitEl = document.getElementById("submit");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      statusEl.textContent = "Building...";
+      submitEl.disabled = true;
+
+      const body = new FormData(form);
+      try {
+        const response = await fetch("/api/convert", { method: "POST", body });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "conversion failed");
+        }
+
+        const blob = await response.blob();
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        const filename = response.headers.get("X-Download-Name") || "icons.zip";
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        statusEl.textContent = "Done. Download started.";
+      } catch (error) {
+        statusEl.textContent = error.message;
+      } finally {
+        submitEl.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

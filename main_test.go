@@ -558,6 +558,14 @@ func writeSampleSVG(path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+func samplePNGBytes(width, height int) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	if err := png.Encode(buf, sampleImage(width, height)); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func writeSampleJPEG(path string) error {
 	img := sampleImage(320, 180)
 	file, err := os.Create(path)

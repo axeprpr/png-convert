@@ -40,7 +40,9 @@ type Options struct {
 	ICNSName   string
 	Name       string
 	OutputDir  string
+	Addr       string
 	Clean      bool
+	Serve      bool
 	Sizes      []int
 	Only       map[string]bool
 	Fit        string
@@ -97,6 +99,13 @@ func main() {
 		fmt.Println(version)
 		return
 	}
+	if opts.Serve {
+		if err := serveWebUI(opts.Addr); err != nil {
+			fmt.Fprintf(os.Stderr, "web ui failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if err := Convert(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "conversion failed: %v\n", err)
@@ -117,7 +126,9 @@ func parseFlags() (Options, error) {
 	flag.StringVar(&opts.ICOName, "w", "app.ico", "ICO output filename")
 	flag.StringVar(&opts.ICNSName, "m", "AppIcon.icns", "ICNS output filename")
 	flag.StringVar(&opts.OutputDir, "d", ".", "base output directory")
+	flag.StringVar(&opts.Addr, "addr", "127.0.0.1:3222", "address for the web UI server")
 	flag.BoolVar(&opts.Clean, "clean", false, "remove generated output directories before regenerating")
+	flag.BoolVar(&opts.Serve, "serve", false, "start a local web UI instead of running a one-shot conversion")
 	flag.StringVar(&sizesArg, "sizes", "16,24,32,48,64,96,128,256,512", "comma separated icon sizes")
 	flag.StringVar(&onlyArg, "only", "linux,pixmap,ico,icns", "comma separated outputs: linux,pixmap,ico,icns")
 	flag.StringVar(&opts.Fit, "fit", "stretch", "resize mode: stretch, contain, or cover")
@@ -183,6 +194,12 @@ func parseSizes(raw string) ([]int, error) {
 }
 
 func validateOptions(opts Options) error {
+	if opts.Serve {
+		if strings.TrimSpace(opts.Addr) == "" {
+			return errors.New("web UI address is required")
+		}
+		return nil
+	}
 	if opts.InputPath == "" {
 		return errors.New("input path is required")
 	}
