@@ -104,6 +104,35 @@
       font-size: 13px;
       opacity: 0.8;
     }
+    .dropzone {
+      display: grid;
+      gap: 8px;
+      padding: 18px;
+      border: 3px dashed #7e6241;
+      background: #efe2c9;
+      text-align: center;
+    }
+    .dropzone.active {
+      background: #e1d0b0;
+      border-color: #b64d2d;
+    }
+    .result {
+      display: none;
+      padding: 14px;
+      border: 2px solid #3a2d1f;
+      background: #efe2c9;
+    }
+    .result.show {
+      display: block;
+    }
+    .result a {
+      color: #8a2f16;
+      font-weight: 700;
+    }
+    .result ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+    }
   </style>
 </head>
 <body>
@@ -114,6 +143,10 @@
       <form id="form">
         <div class="row">
           <label for="file">Source image</label>
+          <div id="dropzone" class="dropzone">
+            <div>Drop a file here, or use the picker.</div>
+            <div class="hint">Supports png, svg, jpg, jpeg, gif, bmp, tiff, tif, webp.</div>
+          </div>
           <input id="file" name="file" type="file" accept=".png,.svg,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.webp" required>
         </div>
 
@@ -153,6 +186,10 @@
 
         <button id="submit" type="submit">Build Icons</button>
         <div id="status" class="status"></div>
+        <div id="result" class="result">
+          <div><a id="download" href="#" download>Download zip</a></div>
+          <ul id="files"></ul>
+        </div>
         <div class="hint">Run locally with <code>go run . -serve</code> and open the printed address.</div>
       </form>
     </div>
@@ -160,13 +197,51 @@
 
   <script>
     const form = document.getElementById("form");
+    const fileInput = document.getElementById("file");
+    const dropzone = document.getElementById("dropzone");
+    const resultEl = document.getElementById("result");
+    const downloadEl = document.getElementById("download");
+    const filesEl = document.getElementById("files");
     const statusEl = document.getElementById("status");
     const submitEl = document.getElementById("submit");
+
+    function setDropFile(file) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      dropzone.firstElementChild.textContent = "Selected: " + file.name;
+    }
+
+    ["dragenter", "dragover"].forEach((type) => {
+      dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.add("active");
+      });
+    });
+    ["dragleave", "drop"].forEach((type) => {
+      dropzone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("active");
+      });
+    });
+    dropzone.addEventListener("drop", (event) => {
+      const file = event.dataTransfer.files[0];
+      if (file) {
+        setDropFile(file);
+      }
+    });
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      if (file) {
+        dropzone.firstElementChild.textContent = "Selected: " + file.name;
+      }
+    });
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       statusEl.textContent = "Building...";
       submitEl.disabled = true;
+      resultEl.classList.remove("show");
 
       const body = new FormData(form);
       try {
@@ -176,15 +251,18 @@
           throw new Error(text || "conversion failed");
         }
 
-        const blob = await response.blob();
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        const filename = response.headers.get("X-Download-Name") || "icons.zip";
-        link.href = url;
-        link.download = filename;
-        link.click();
-        URL.revokeObjectURL(url);
-        statusEl.textContent = "Done. Download started.";
+        const result = await response.json();
+        downloadEl.href = result.download_url;
+        downloadEl.download = result.archive_name;
+        downloadEl.textContent = "Download " + result.archive_name;
+        filesEl.innerHTML = "";
+        for (const file of result.artifacts) {
+          const item = document.createElement("li");
+          item.textContent = file.name + " (" + file.size + " bytes)";
+          filesEl.appendChild(item);
+        }
+        resultEl.classList.add("show");
+        statusEl.textContent = "Done.";
       } catch (error) {
         statusEl.textContent = error.message;
       } finally {

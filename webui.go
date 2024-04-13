@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -10,15 +11,44 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
 
 //go:embed webui.html
 var webUIPage string
 
+type webUIArtifact struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+type webUIResult struct {
+	ID          string          `json:"id"`
+	ArchiveName string          `json:"archive_name"`
+	DownloadURL string          `json:"download_url"`
+	Artifacts   []webUIArtifact `json:"artifacts"`
+}
+
+type webUIJob struct {
+	ArchiveName string
+	ArchivePath string
+	TempDir     string
+	Artifacts   []webUIArtifact
+}
+
+var webUIJobs = struct {
+	sync.Mutex
+	items map[string]webUIJob
+}{
+	items: map[string]webUIJob{},
+}
+
 func serveWebUI(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleWebUIIndex)
 	mux.HandleFunc("/api/convert", handleWebUIConvert)
+	mux.HandleFunc("/api/download/", handleWebUIDownload)
 
 	fmt.Printf("Web UI listening on http://%s\n", addr)
 	return http.ListenAndServe(addr, mux)
@@ -43,14 +73,39 @@ func handleWebUIConvert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	archiveName, archivePath, err := buildWebUIArchive(r)
+	result, err := buildWebUIResult(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer os.RemoveAll(filepath.Dir(archivePath))
 
-	file, err := os.Open(archivePath)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, fmt.Sprintf("encode response: %v", err), http.StatusInternalServerError)
+	}
+}
+
+func handleWebUIDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	jobID := strings.TrimPrefix(r.URL.Path, "/api/download/")
+	if jobID == "" || strings.Contains(jobID, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	webUIJobs.Lock()
+	job, ok := webUIJobs.items[jobID]
+	webUIJobs.Unlock()
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, err := os.Open(job.ArchivePath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("open archive: %v", err), http.StatusInternalServerError)
 		return
@@ -58,27 +113,26 @@ func handleWebUIConvert(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", archiveName))
-	w.Header().Set("X-Download-Name", archiveName)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", job.ArchiveName))
 	if _, err := io.Copy(w, file); err != nil {
 		http.Error(w, fmt.Sprintf("stream archive: %v", err), http.StatusInternalServerError)
 	}
 }
 
-func buildWebUIArchive(r *http.Request) (string, string, error) {
+func buildWebUIResult(r *http.Request) (webUIResult, error) {
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		return "", "", fmt.Errorf("parse form: %w", err)
+		return webUIResult{}, fmt.Errorf("parse form: %w", err)
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		return "", "", fmt.Errorf("read upload: %w", err)
+		return webUIResult{}, fmt.Errorf("read upload: %w", err)
 	}
 	defer file.Close()
 
 	targets, err := parseWebTargets(r.MultipartForm.Value["target"])
 	if err != nil {
-		return "", "", err
+		return webUIResult{}, err
 	}
 
 	name := sanitizeBaseName(r.FormValue("name"))
@@ -101,25 +155,25 @@ func buildWebUIArchive(r *http.Request) (string, string, error) {
 
 	background, err := parseBackground(r.FormValue("background"))
 	if err != nil {
-		return "", "", err
+		return webUIResult{}, err
 	}
 
 	tempDir, err := os.MkdirTemp("", "png-convert-webui-*")
 	if err != nil {
-		return "", "", fmt.Errorf("create temp dir: %w", err)
+		return webUIResult{}, fmt.Errorf("create temp dir: %w", err)
 	}
 
 	inputName := sanitizeUploadName(header)
 	inputPath := filepath.Join(tempDir, inputName)
 	if err := writeUpload(inputPath, file); err != nil {
 		os.RemoveAll(tempDir)
-		return "", "", err
+		return webUIResult{}, err
 	}
 
 	parsedSizes, err := parseSizes(sizes)
 	if err != nil {
 		os.RemoveAll(tempDir)
-		return "", "", err
+		return webUIResult{}, err
 	}
 
 	opts := Options{
@@ -138,10 +192,31 @@ func buildWebUIArchive(r *http.Request) (string, string, error) {
 	}
 	if err := Convert(opts); err != nil {
 		os.RemoveAll(tempDir)
-		return "", "", err
+		return webUIResult{}, err
 	}
 
-	return opts.Archive, filepath.Join(tempDir, opts.Archive), nil
+	artifacts, err := webUIArtifacts(tempDir, name, targets)
+	if err != nil {
+		os.RemoveAll(tempDir)
+		return webUIResult{}, err
+	}
+
+	jobID := webUIJobID()
+	webUIJobs.Lock()
+	webUIJobs.items[jobID] = webUIJob{
+		ArchiveName: opts.Archive,
+		ArchivePath: filepath.Join(tempDir, opts.Archive),
+		TempDir:     tempDir,
+		Artifacts:   artifacts,
+	}
+	webUIJobs.Unlock()
+
+	return webUIResult{
+		ID:          jobID,
+		ArchiveName: opts.Archive,
+		DownloadURL: "/api/download/" + jobID,
+		Artifacts:   artifacts,
+	}, nil
 }
 
 func parseWebTargets(values []string) (map[string]bool, error) {
@@ -210,4 +285,32 @@ func listArchiveEntries(path string) ([]string, error) {
 		names = append(names, file.Name)
 	}
 	return names, nil
+}
+
+func webUIArtifacts(outputDir, name string, targets map[string]bool) ([]webUIArtifact, error) {
+	artifacts := make([]webUIArtifact, 0, 2)
+	for _, item := range []struct {
+		target string
+		path   string
+	}{
+		{target: "ico", path: filepath.Join(outputDir, name+".ico")},
+		{target: "icns", path: filepath.Join(outputDir, name+".icns")},
+	} {
+		if !targets[item.target] {
+			continue
+		}
+		info, err := os.Stat(item.path)
+		if err != nil {
+			return nil, fmt.Errorf("stat output %s: %w", item.path, err)
+		}
+		artifacts = append(artifacts, webUIArtifact{
+			Name: filepath.Base(item.path),
+			Size: info.Size(),
+		})
+	}
+	return artifacts, nil
+}
+
+func webUIJobID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
