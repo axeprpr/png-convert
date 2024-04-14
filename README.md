@@ -44,7 +44,7 @@ It listens on `127.0.0.1:3222` by default. Override it if needed:
 go run . -serve -addr 127.0.0.1:8080
 ```
 
-The page is embedded into the binary and does not need external HTML, CSS, or JS files. Upload one source image, choose `ico` and/or `icns`, and it downloads a `.zip` with the generated files.
+The page is embedded into the binary and does not need external HTML, CSS, or JS files. Upload one source image, choose `ico` and/or `icns`, and it shows a download link plus the generated file list before you fetch the `.zip`.
 
 ## Flags
 
